@@ -49,4 +49,4 @@ yarn hardhat deploy --network <network>
 
 ## Usage
 
-You can find the dApp usage documentation at [https://github.com/grindery-io/grindery-contracts/USAGE.md](https://github.com/grindery-io/grindery-contracts/USAGE.md)
+You can find the dApp usage documentation at [https://github.com/grindery-io/grindery-contracts/blob/master/USAGE.md](https://github.com/grindery-io/grindery-contracts/blob/master/USAGE.md)

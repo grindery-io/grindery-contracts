@@ -2,7 +2,7 @@
 
 Documentation about how the smart contracts in this repo are used in dApps
 
-## [GrinderyBatchTransfer.sol](https://github.com/grindery-io/grindery-contracts/contracts/GrinderyBatchTransfer.sol)
+## [GrinderyBatchTransfer.sol](https://github.com/grindery-io/grindery-contracts/blob/master/contracts/GrinderyBatchTransfer.sol)
 
 This contract is used when making batch transfers directly from the user's wallet.
 
@@ -25,10 +25,10 @@ This contract implements a few mechanisms to prevent ether and ERC20 tokens from
 - A `recover` function is implemented as a rescue mechanism. 
 It can only be called by the contract's owner, accepts a `recipient` address and a `token` address (0x0 for ether) as arguments 
 and sends the contract's token balance to the specified recipient.
-See the [OwnerRecoverable contract](https://github.com/grindery-io/grindery-contracts/contracts/base/OwnerRecoverable.sol) that this contract inherits for implementation details.
+See the [OwnerRecoverable contract](https://github.com/grindery-io/grindery-contracts/blob/master/contracts/base/OwnerRecoverable.sol) that this contract inherits for implementation details.
 
 
-## [GrinderyDelegatedBatchTransfer.sol](https://github.com/grindery-io/grindery-contracts/contracts/GrinderyDelegatedBatchTransfer.sol)
+## [GrinderyDelegatedBatchTransfer.sol](https://github.com/grindery-io/grindery-contracts/blob/master/contracts/GrinderyDelegatedBatchTransfer.sol)
 
 This contract is used when making delegated/indirect batch transfers e.g withdrawal requests to Aragon DAOs.
 
