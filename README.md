@@ -50,3 +50,11 @@ yarn hardhat deploy --network <network>
 ## Usage
 
 You can find the dApp usage documentation at [https://github.com/grindery-io/grindery-contracts/blob/master/USAGE.md](https://github.com/grindery-io/grindery-contracts/blob/master/USAGE.md)
+
+## Security and Liability
+
+All contracts are WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+##  License
+
+All smart contracts are released under LGPL-3.0

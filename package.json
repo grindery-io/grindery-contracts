@@ -9,14 +9,15 @@
     "clean": "hardhat clean",
     "build": "hardhat compile",
     "test": "hardhat test",
-    "deploy": "yarn build && hardhat run scripts/grindery-batch-transfer.js --network"
+    "deploy": "yarn build && hardhat run scripts/grindery-batch-transfer.js --network",
+    "deploy:multisend": "yarn build && hardhat run scripts/multisend.js --network"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/grindery-io/grindery-contracts.git"
   },
   "author": "tdsemakula@gmail.com",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "bugs": {
     "url": "https://github.com/grindery-io/grindery-contracts/issues"
   },
