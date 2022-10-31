@@ -1,10 +1,11 @@
 const {expect, use} = require("chai"),
   {waffle} = require("hardhat"),
   {deployContract} = require("../utils/deploy"),
-  {ZERO_ADDRESS, CONTRACTS, EVENTS} = require("../utils/constants"),
+  {ZERO_ADDRESS, CONTRACTS, EVENTS, ERROR_MESSAGES, GAS_OVERPAY} = require("../utils/constants"),
   waffleChaiMultiTokenPlugin = require("../utils/waffle-chai-multi-token"),
   {getAccountAddresses, getAmountSum, filterMatchingItemsByTokenIndex, setUpTokens,
-    generateRecipients, generateAmounts} = require("../utils/tests");
+    generateRecipients, generateAmounts, cleanAmounts
+  } = require("../utils/tests");
 
 use(waffleChaiMultiTokenPlugin);
 
@@ -28,6 +29,95 @@ describe("GrinderyDelegatedBatchTransfer", () => {
     amount = amounts[0];
   });
 
+  // Utility method for setting up a delegated batch transfer
+  const setUpDelegatedBatchTransfer = async (
+    recipients, // list of recipients
+    amounts, // list of corresponding amounts
+    // list of corresponding token addresses (0x0 or empty list for ether)
+    tokenAddresses = [],
+    overrides = {},
+  ) => {
+    return deployContract(CONTRACTS.GRINDERY_DELEGATED_BATCH_TRANSFER, [
+      recipients,
+      amounts,
+      tokenAddresses || [],
+      overrides || {},
+    ], initiator);
+  };
+
+  // Utility method for setting up and testing delegated batch transfer
+  const setUpAndTestDelegatedBatchTransfer = async (
+    recipients, // list of recipients
+    amounts, // list of corresponding amounts
+    // list of corresponding token addresses (0x0 or empty list for ether)
+    tokenAddresses = [],
+  ) => {
+    return setUpDelegatedBatchTransfer(
+      recipients,
+      amounts,
+      tokenAddresses || []
+    ).then(async delegatedBatchTransfer => {
+      const isERC20TokenTransfer = !tokenAddresses || !Array.isArray(tokenAddresses) || tokenAddresses.length > 0;
+
+      // Test recipients getter
+      for (const [idx,] of recipients.entries()) {
+        await expect(
+          await delegatedBatchTransfer.connect(relayer).recipients(idx)
+        ).to.equal(recipients[idx]);
+      }
+
+      // Test amounts getter
+      for (const [idx,] of amounts.entries()) {
+        await expect(
+          await delegatedBatchTransfer.connect(relayer).amounts(idx)
+        ).to.equal(amounts[idx]);
+      }
+
+      if(isERC20TokenTransfer) {
+        // Test tokenAddresses getter
+        for (const [idx,] of tokenAddresses.entries()) {
+          await expect(
+            await delegatedBatchTransfer.connect(relayer).tokenAddresses(idx)
+          ).to.equal(tokenAddresses[idx]);
+        }
+      }
+
+      // Test recipients length
+      await expect(
+        await delegatedBatchTransfer.connect(relayer).getRecipientsLength()
+      ).to.equal(recipients.length);
+
+      // Test amounts length
+      await expect(
+        await delegatedBatchTransfer.connect(relayer).getAmountsLength()
+      ).to.equal(amounts.length);
+
+      if(isERC20TokenTransfer) {
+        // Test tokenAddresses length
+        await expect(
+          await delegatedBatchTransfer.connect(relayer).getTokenAddressesLength()
+        ).to.equal(tokenAddresses.length);
+      }
+
+      // Test recipients
+      await expect(
+        await delegatedBatchTransfer.connect(relayer).getRecipients()
+      ).to.deep.equal(recipients);
+
+      // Test amounts
+      await expect(
+        cleanAmounts(await delegatedBatchTransfer.connect(relayer).getAmounts())
+      ).to.deep.equal(cleanAmounts(amounts));
+
+      if(isERC20TokenTransfer) {
+        // Test tokenAddresses
+        await expect(
+          await delegatedBatchTransfer.connect(relayer).getTokenAddresses()
+        ).to.deep.equal(tokenAddresses);
+      }
+    });
+  };
+
   // Utility method for setting up and funding a delegated batch transfer
   const setUpAndFundDelegatedBatchTransfer = async (
     recipients, // list of recipients
@@ -37,11 +127,11 @@ describe("GrinderyDelegatedBatchTransfer", () => {
     // custom function to modify funding amount, receives expect transfer amount and index as arguments
     fundingAmountModifier = null
   ) => {
-    return deployContract(CONTRACTS.GRINDERY_DELEGATED_BATCH_TRANSFER, [
+    return setUpDelegatedBatchTransfer(
       recipients,
       amounts,
       tokenAddresses || []
-    ], initiator).then(async delegatedBatchTransfer => {
+    ).then(async delegatedBatchTransfer => {
       // Transfer ether and tokens to delegatedBatchTransfer contract
       for (const [idx,] of recipients.entries()) {
         const tokenAddress = tokenAddresses && tokenAddresses[idx],
@@ -77,6 +167,13 @@ describe("GrinderyDelegatedBatchTransfer", () => {
 
   describe("Ether transfers", () => {
     describe("Success", () => {
+      it("Setup delegated ether transfer", async () => {
+        await setUpAndTestDelegatedBatchTransfer(
+          getAccountAddresses(recipients),
+          amounts
+        );
+      });
+
       it("Transfer ether to 1 recipient", async () => {
         delegatedBatchTransfer = await setUpAndFundDelegatedBatchTransfer(
           [recipient.address],
@@ -141,7 +238,7 @@ describe("GrinderyDelegatedBatchTransfer", () => {
 
         await expect(
           delegatedBatchTransfer.connect(relayer).completeTransfer()
-        ).to.be.reverted;
+        ).to.be.revertedWith(ERROR_MESSAGES.INSUFFICIENT_BALANCE);
       });
     });
   });
@@ -154,6 +251,14 @@ describe("GrinderyDelegatedBatchTransfer", () => {
     });
 
     describe("Success", () => {
+      it("Setup delegated ERC20 token transfer", async () => {
+        await setUpAndTestDelegatedBatchTransfer(
+          getAccountAddresses(recipients),
+          amounts,
+          getAccountAddresses(tokens)
+        );
+      });
+
       it("Transfer ERC20 token to 1 recipient", async () => {
         delegatedBatchTransfer = await setUpAndFundDelegatedBatchTransfer(
           [recipient.address],
@@ -233,7 +338,7 @@ describe("GrinderyDelegatedBatchTransfer", () => {
 
         await expect(
           delegatedBatchTransfer.deployTransaction
-        ).to.emit(delegatedBatchTransfer, 'BatchTransferRequested')
+        ).to.emit(delegatedBatchTransfer, EVENTS.BATCH_TRANSFER_REQUESTED)
           .withArgs(
             initiator.address,
             getAccountAddresses(recipients),
@@ -262,7 +367,7 @@ describe("GrinderyDelegatedBatchTransfer", () => {
     });
 
     describe("Revert", () => {
-      it("Revert on insufficient tokens", async () => {
+      it("Revert on insufficient tokens sent", async () => {
         delegatedBatchTransfer = await setUpAndFundDelegatedBatchTransfer(
           getAccountAddresses(recipients),
           amounts,
@@ -272,7 +377,7 @@ describe("GrinderyDelegatedBatchTransfer", () => {
 
         await expect(
           delegatedBatchTransfer.connect(relayer).completeTransfer()
-        ).to.be.reverted;
+        ).to.be.revertedWith(ERROR_MESSAGES.INSUFFICIENT_TOKEN_BALANCE);
       });
     });
   });
@@ -280,65 +385,93 @@ describe("GrinderyDelegatedBatchTransfer", () => {
   describe("Revert on bad arguments", () => {
     it("Revert on no arguments", async () => {
       await expect(
-        setUpAndFundDelegatedBatchTransfer(
+        setUpDelegatedBatchTransfer(
           [],
-          []
+          [],
+          [],
+          {
+            gasLimit: GAS_OVERPAY,
+          }
         )
-      ).to.be.reverted;
+      ).to.be.revertedWith(ERROR_MESSAGES.NO_RECIPIENTS);
     });
 
     it("Revert on less recipients than amounts", async () => {
       await expect(
-        setUpAndFundDelegatedBatchTransfer(
+        setUpDelegatedBatchTransfer(
           getAccountAddresses(recipients).slice(1),
-          amounts
+          amounts,
+          [],
+          {
+            gasLimit: GAS_OVERPAY,
+          }
         )
-      ).to.be.reverted;
+      ).to.be.revertedWith(ERROR_MESSAGES.MISMATCH_RECIPIENTS_AND_AMOUNTS);
     });
 
     it("Revert on more recipients than amounts", async () => {
       await expect(
-        setUpAndFundDelegatedBatchTransfer(
+        setUpDelegatedBatchTransfer(
           getAccountAddresses(recipients),
           amounts.slice(1),
+          [],
+          {
+            gasLimit: GAS_OVERPAY,
+          }
         )
-      ).to.be.reverted;
+      ).to.be.revertedWith(ERROR_MESSAGES.MISMATCH_RECIPIENTS_AND_AMOUNTS);
     });
 
     it("Revert on zero amounts", async () => {
       await expect(
-        setUpAndFundDelegatedBatchTransfer(
+        setUpDelegatedBatchTransfer(
           getAccountAddresses(recipients),
           [0, ...amounts.slice(1)],
+          [],
+          {
+            gasLimit: GAS_OVERPAY,
+          }
         )
-      ).to.be.reverted;
+      ).to.be.revertedWith(ERROR_MESSAGES.ZERO_AMOUNT_TRANSFER);
     });
 
     it("Revert on zero address set as recipient", async () => {
       await expect(
-        setUpAndFundDelegatedBatchTransfer(
+        setUpDelegatedBatchTransfer(
           [ZERO_ADDRESS, ...getAccountAddresses(recipients).slice(1)],
-          amounts
+          amounts,
+          [],
+          {
+            gasLimit: GAS_OVERPAY,
+          }
         )
-      ).to.be.reverted;
+      ).to.be.revertedWith(ERROR_MESSAGES.ZERO_ADDRESS_RECIPIENT);
     });
 
     it("Revert on too many token addresses", async () => {
       await expect(
-        setUpAndFundDelegatedBatchTransfer(
+        setUpDelegatedBatchTransfer(
           getAccountAddresses(recipients),
           amounts,
-          [...Array(amounts.length + 1).keys()].map(() => ZERO_ADDRESS))
-      ).to.be.reverted;
+          Array.from(Array(recipients.length + 1)).map(() => ZERO_ADDRESS),
+          {
+            gasLimit: GAS_OVERPAY,
+          }
+        ),
+      ).to.be.revertedWith(ERROR_MESSAGES.MISMATCH_TOKEN_ADDRESSES_LENGTH);
     });
 
     it("Revert on too few token addresses", async () => {
       await expect(
-        setUpAndFundDelegatedBatchTransfer(
+        setUpDelegatedBatchTransfer(
           getAccountAddresses(recipients),
           amounts,
-          [...Array(amounts.length - 1).keys()].map(() => ZERO_ADDRESS))
-      ).to.be.reverted;
+          Array.from(Array(recipients.length - 1)).map(() => ZERO_ADDRESS),
+          {
+            gasLimit: GAS_OVERPAY,
+          }
+        )
+      ).to.be.revertedWith(ERROR_MESSAGES.MISMATCH_TOKEN_ADDRESSES_LENGTH);
     });
   });
 
@@ -361,6 +494,22 @@ describe("GrinderyDelegatedBatchTransfer", () => {
             [delegatedBatchTransfer, treasury],
             [-sentAmount, sentAmount]
           );
+        });
+
+        it("Emit BatchRecovered event", async () => {
+          const sentAmount = amount * 0.5;
+
+          delegatedBatchTransfer = await setUpAndFundDelegatedBatchTransfer(
+            [recipient.address],
+            [amount],
+            null,
+            () => sentAmount,
+          );
+
+          await expect(
+            delegatedBatchTransfer.batchRecover(treasury.address)
+          ).to.emit(delegatedBatchTransfer, EVENTS.BATCH_RECOVERED)
+            .withArgs(treasury.address, [sentAmount], []);
         });
       });
 
@@ -527,6 +676,22 @@ describe("GrinderyDelegatedBatchTransfer", () => {
               };
             }).filter(Boolean)
           );
+        });
+
+        it("Emit BatchRecovered event", async () => {
+          const sentAmount = amount * 0.5;
+
+          delegatedBatchTransfer = await setUpAndFundDelegatedBatchTransfer(
+            [recipient.address],
+            [amount],
+            [token.address],
+            () => sentAmount,
+          );
+
+          await expect(
+            delegatedBatchTransfer.batchRecover(treasury.address)
+          ).to.emit(delegatedBatchTransfer, EVENTS.BATCH_RECOVERED)
+            .withArgs(treasury.address, [sentAmount], [token.address]);
         });
       });
 

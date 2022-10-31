@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.8.0 <0.9.0;
+pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -14,13 +14,13 @@ import "./base/BatchRecoverable.sol";
  */
 contract GrinderyDelegatedBatchTransfer is Ownable, BatchTransferable, Receivable, BatchRecoverable {
   // @dev Recipients
-  address[] recipients;
+  address[] public recipients;
 
   // @dev Amounts
-  uint256[] amounts;
+  uint256[] public amounts;
 
   // @dev Token Addresses
-  address[] tokenAddresses;
+  address[] public tokenAddresses;
 
   /**
    * @dev Emitted when a batch transfer of ether and pre-approved ERC20 tokens to `recipients`
@@ -45,6 +45,75 @@ contract GrinderyDelegatedBatchTransfer is Ownable, BatchTransferable, Receivabl
   }
 
   /**
+   * @dev Throws if all tokens have sufficient balance to complete the batch transfer
+   */
+  modifier isRecoverable() {
+    bool hasAnyInsufficientBalance = false;
+
+    // Copy amounts and tokenAddresses into memory to save gas due to multiple reads
+    uint256[] memory mAmounts = amounts;
+    address[] memory mTokenAddresses = tokenAddresses;
+    uint numTokenAddresses = tokenAddresses.length;
+
+    if (numTokenAddresses > 0) {
+      for (uint i; i < numTokenAddresses; i++) {
+        address token = mTokenAddresses[i];
+        if (_balance(token) < _getTokenTotal(token, mAmounts, mTokenAddresses)) {
+          hasAnyInsufficientBalance = true;
+        }
+      }
+    } else {
+      if (address(this).balance < _getTokenTotal(address(0), mAmounts, mTokenAddresses)) {
+        hasAnyInsufficientBalance = true;
+      }
+    }
+    require(hasAnyInsufficientBalance, "Grindery: not recoverable");
+    _;
+  }
+
+  /**
+   * @dev Returns length of recipients array
+   */
+  function getRecipientsLength() public view returns (uint) {
+    return recipients.length;
+  }
+
+  /**
+   * @dev Returns length of amounts array
+   */
+  function getAmountsLength() public view returns (uint) {
+    return amounts.length;
+  }
+
+  /**
+   * @dev Returns length of tokenAddresses array
+   */
+  function getTokenAddressesLength() public view returns (uint) {
+    return tokenAddresses.length;
+  }
+
+  /**
+   * @dev Returns recipients array
+   */
+  function getRecipients() public view returns (address[] memory) {
+    return recipients;
+  }
+
+  /**
+   * @dev Returns amounts array
+   */
+  function getAmounts() public view returns (uint256[] memory) {
+    return amounts;
+  }
+
+  /**
+   * @dev Returns tokenAddresses array
+   */
+  function getTokenAddresses() public view returns (address[] memory) {
+    return tokenAddresses;
+  }
+
+  /**
    * @dev Complete batch transfer of ether and ERC20 tokens to `recipients` according to corresponding amount (by index) in `amounts`
    * A corresponding token address in `tokenAddresses` (by index) determines whether it's an ether (0x0) or ERC20 transfer
    *
@@ -55,31 +124,14 @@ contract GrinderyDelegatedBatchTransfer is Ownable, BatchTransferable, Receivabl
    * - See {BatchTransferable-_batchTransfer} for other requirements
    */
   function completeTransfer() external payable {
-    uint256 tokenTotal = _getTokenTotal(address(0), amounts, tokenAddresses);
-    require(address(this).balance >= tokenTotal || msg.value >= tokenTotal);
-    bool success = _batchTransfer(address(this), recipients, amounts, tokenAddresses);
-    require(success);
-  }
+    // Copy amounts and tokenAddresses into memory to save gas due to multiple reads
+    uint256[] memory mAmounts = amounts;
+    address[] memory mTokenAddresses = tokenAddresses;
 
-  /**
-   * @dev Throws if all tokens have sufficient balance to complete the batch transfer
-   */
-  modifier isRecoverable() {
-    bool hasAnyInsufficientBalance = false;
-    if (tokenAddresses.length > 0) {
-      for (uint i; i < tokenAddresses.length; i++) {
-        address token = tokenAddresses[i];
-        if (_balance(token) < _getTokenTotal(token, amounts, tokenAddresses)) {
-          hasAnyInsufficientBalance = true;
-        }
-      }
-    } else {
-      if (address(this).balance < _getTokenTotal(address(0), amounts, tokenAddresses)) {
-        hasAnyInsufficientBalance = true;
-      }
-    }
-    require(hasAnyInsufficientBalance);
-    _;
+    uint256 tokenTotal = _getTokenTotal(address(0), mAmounts, mTokenAddresses);
+    require(address(this).balance >= tokenTotal || msg.value >= tokenTotal, "Grindery: insufficient balance");
+    bool success = _batchTransfer(address(this), recipients, mAmounts, mTokenAddresses);
+    require(success, "Grindery: batch transfer failed");
   }
 
   /**
@@ -92,14 +144,15 @@ contract GrinderyDelegatedBatchTransfer is Ownable, BatchTransferable, Receivabl
    * - Smart contract must be in a recoverable state
    */
   function batchRecover(address recipient) external onlyOwner isRecoverable {
-    address[] memory recoveredTokens = new address[](tokenAddresses.length > 0 ? tokenAddresses.length : 1);
-    if (tokenAddresses.length > 0) {
+    uint numTokenAddresses = tokenAddresses.length;
+    address[] memory recoveredTokens = new address[](numTokenAddresses > 0 ? numTokenAddresses : 1);
+    if (numTokenAddresses > 0) {
       recoveredTokens = tokenAddresses;
     } else {
       recoveredTokens[0] = address(0);
     }
     (bool success, uint256[] memory recoveredAmounts) = _batchRecover(recipient, recoveredTokens);
-    require(success);
+    require(success, "Grindery: batch recovery failed");
     emit BatchRecovered(recipient, recoveredAmounts, recoveredTokens);
   }
 }

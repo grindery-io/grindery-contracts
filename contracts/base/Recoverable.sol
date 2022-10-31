@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.8.0 <0.9.0;
+pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./Transferable.sol";
@@ -11,7 +11,7 @@ import "./Transferable.sol";
  */
 contract Recoverable is Transferable {
   /// @dev Emitted when `amount` of `token` (0x0 for ether) is recovered to `recipient`
-  event Recovered(address indexed recipient, uint256 amount, address token);
+  event Recovered(address indexed recipient, address indexed token, uint256 amount);
 
   /// @dev Get balance of `token` (0x0 for ether)
   function _balance(address token) view internal returns (uint256) {
@@ -25,10 +25,7 @@ contract Recoverable is Transferable {
    * - token balance must be greater than zero
    * - See {Transferable-_transfer} for more requirements
    */
-  function _recover(address recipient, address token) internal returns (bool, uint256) {
-    require(recipient != address(0));
-    require(recipient != address(this));
-
+  function _recover(address recipient, address token) internal isTransferableRecipient(recipient) returns (bool, uint256) {
     uint256 balance = _balance(token);
     bool success = false;
     if (balance > 0) {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.8.0 <0.9.0;
+pragma solidity 0.8.17;
 
 import "./base/BatchTransferable.sol";
 import "./base/OwnerRecoverable.sol";
@@ -21,9 +21,9 @@ contract GrinderyBatchTransfer is BatchTransferable, OwnerRecoverable {
    * - See {BatchTransferable._batchTransfer} for other requirements
    */
   function batchTransfer(address[] calldata recipients, uint256[] calldata amounts, address[] calldata tokenAddresses) external payable {
-    require(recipients.length == tokenAddresses.length || tokenAddresses.length == 0);
-    require(msg.value == _getTokenTotal(address(0), amounts, tokenAddresses));
+    require(recipients.length == tokenAddresses.length || tokenAddresses.length == 0, "Grindery: recipients and tokenAddresses arrays are not equal length and tokenAddresses is not empty");
+    require(msg.value == _getTokenTotal(address(0), amounts, tokenAddresses), "Grindery: wrong ether amount");
     bool success = _batchTransfer(msg.sender, recipients, amounts, tokenAddresses);
-    require(success);
+    require(success, "Grindery: batch transfer failed");
   }
 }

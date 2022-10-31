@@ -1,14 +1,23 @@
 const _ = require("lodash"),
+  {BigNumber} = require("ethers"),
   { waffle } = require("hardhat"),
   {deployContract} = require("./deploy"),
   {CONTRACTS, MIN_BATCH_SIZE} = require("./constants");
 
+const getAccountAddress = account => account.address || account;
+
 const getAccountAddresses = accounts => {
-  return (accounts || []).map(account => account.address);
+  return (accounts || []).map(getAccountAddress);
+};
+
+const cleanAmount = amount => typeof amount === "number"?amount:BigNumber.from(amount).toNumber();
+
+const cleanAmounts = amounts => {
+  return (amounts || []).map(cleanAmount);
 };
 
 const getAmountSum = amounts => {
-  return (amounts || []).reduce((x, y) => x + y);
+  return (amounts || []).reduce((x, y) => cleanAmount(x) + cleanAmount(y));
 };
 
 const filterMatchingItemsByTokenIndex = (token, items, tokens) => {
@@ -72,7 +81,10 @@ const generateAmounts = () => {
 };
 
 module.exports = {
+  getAccountAddress,
   getAccountAddresses,
+  cleanAmount,
+  cleanAmounts,
   getAmountSum,
   filterMatchingItemsByTokenIndex,
   setUpTokens,

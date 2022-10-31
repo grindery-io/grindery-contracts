@@ -1,7 +1,7 @@
 const {expect, use} = require("chai"),
   {waffle} = require("hardhat"),
   {deployContract} = require("../utils/deploy"),
-  {ZERO_ADDRESS, CONTRACTS, EVENTS} = require("../utils/constants"),
+  {ZERO_ADDRESS, CONTRACTS, EVENTS, ERROR_MESSAGES} = require("../utils/constants"),
   waffleChaiMultiTokenPlugin = require("../utils/waffle-chai-multi-token"),
   {getAccountAddresses, getAmountSum, filterMatchingItemsByTokenIndex, setUpTokens, approveTokens,
     generateRecipients, generateAmounts} = require("../utils/tests");
@@ -68,7 +68,7 @@ describe("GrinderyBatchTransfer", () => {
               [], {
                 value: getAmountSum(amounts),
               })
-          ).to.emit(batchTransfer, 'BatchTransfer')
+          ).to.emit(batchTransfer, EVENTS.BATCH_TRANSFER)
             .withArgs(payer.address, getAccountAddresses(recipients), amounts, []);
         });
       });
@@ -82,7 +82,7 @@ describe("GrinderyBatchTransfer", () => {
               [], {
                 value: getAmountSum(amounts) - 1,
               })
-          ).to.be.reverted;
+          ).to.be.revertedWith(ERROR_MESSAGES.WRONG_ETHER_AMOUNT);
         });
 
         it("Revert on too much ether sent", async () => {
@@ -93,7 +93,7 @@ describe("GrinderyBatchTransfer", () => {
               [], {
                 value: getAmountSum(amounts) + 1,
               })
-          ).to.be.reverted;
+          ).to.be.revertedWith(ERROR_MESSAGES.WRONG_ETHER_AMOUNT);
         });
 
         it("Revert on direct ether transfer", async () => {
@@ -206,7 +206,7 @@ describe("GrinderyBatchTransfer", () => {
               amounts.map((amount, idx) => amount * (idx === 0?1:100)),
               getAccountAddresses(tokens)
             )
-          ).to.be.reverted;
+          ).to.be.revertedWith(ERROR_MESSAGES.INSUFFICIENT_TOKEN_ALLOWANCE);
         });
 
         it("Revert on unnecessary ether sent", async () => {
@@ -217,7 +217,7 @@ describe("GrinderyBatchTransfer", () => {
               getAccountAddresses(tokens), {
                 value: amount,
               })
-          ).to.be.reverted;
+          ).to.be.revertedWith(ERROR_MESSAGES.WRONG_ETHER_AMOUNT);
         });
       });
     });
@@ -229,9 +229,9 @@ describe("GrinderyBatchTransfer", () => {
             [],
             [],
             [], {
-              value: amount,
+              value: 0,
             })
-        ).to.be.reverted;
+        ).to.be.revertedWith(ERROR_MESSAGES.NO_RECIPIENTS);
       });
 
       it("Revert on less recipients than amounts", async () => {
@@ -242,7 +242,7 @@ describe("GrinderyBatchTransfer", () => {
             [], {
               value: getAmountSum(amounts)
             })
-        ).to.be.reverted;
+        ).to.be.revertedWith(ERROR_MESSAGES.MISMATCH_RECIPIENTS_AND_AMOUNTS);
       });
 
       it("Revert on more recipients than amounts", async () => {
@@ -253,40 +253,30 @@ describe("GrinderyBatchTransfer", () => {
             [], {
               value: getAmountSum(amounts.slice(1))
             })
-        ).to.be.reverted;
-      });
-
-      it("Revert on more recipients than amounts", async () => {
-        await expect(
-          batchTransfer.batchTransfer(
-            getAccountAddresses(recipients),
-            amounts.slice(1),
-            [], {
-              value: getAmountSum(amounts.slice(1))
-            })
-        ).to.be.reverted;
+        ).to.be.revertedWith(ERROR_MESSAGES.MISMATCH_RECIPIENTS_AND_AMOUNTS);
       });
 
       it("Revert on zero amounts", async () => {
+        const sentAmounts = [0, ...amounts.slice(1)];
         await expect(
           batchTransfer.batchTransfer(
             getAccountAddresses(recipients),
-            [0, ...amounts.slice(1)],
+            sentAmounts,
             [], {
-              value: getAmountSum(amounts)
+              value: getAmountSum(sentAmounts)
             })
-        ).to.be.reverted;
+        ).to.be.revertedWith(ERROR_MESSAGES.ZERO_AMOUNT_TRANSFER);
       });
 
       it("Revert on zero address set as recipient", async () => {
         await expect(
           batchTransfer.batchTransfer(
-            [ZERO_ADDRESS, getAccountAddresses(recipients).slice(1)],
+            [ZERO_ADDRESS, ...getAccountAddresses(recipients).slice(1)],
             amounts,
             [], {
-              value: getAmountSum(amounts)
+              value: getAmountSum(amounts),
             })
-        ).to.be.reverted;
+        ).to.be.revertedWith(ERROR_MESSAGES.ZERO_ADDRESS_RECIPIENT);
       });
 
       it("Revert on too many token addresses", async () => {
@@ -294,10 +284,10 @@ describe("GrinderyBatchTransfer", () => {
           batchTransfer.batchTransfer(
             getAccountAddresses(recipients),
             amounts,
-            [...Array(amounts.length + 1).keys()].map(() => ZERO_ADDRESS), {
-              value: getAmountSum(amounts)
+            Array.from(Array(recipients.length + 1)).map(() => ZERO_ADDRESS), {
+              value: getAmountSum(amounts),
             })
-        ).to.be.reverted;
+        ).to.be.revertedWith(ERROR_MESSAGES.MISMATCH_TOKEN_ADDRESSES_LENGTH);
       });
 
       it("Revert on too few token addresses", async () => {
@@ -305,10 +295,11 @@ describe("GrinderyBatchTransfer", () => {
           batchTransfer.batchTransfer(
             getAccountAddresses(recipients),
             amounts,
-            [...Array(amounts.length - 1).keys()].map(() => ZERO_ADDRESS), {
+            Array.from(Array(recipients.length - 1)).map(() => ZERO_ADDRESS), {
               value: getAmountSum(amounts)
-            })
-        ).to.be.reverted;
+            }
+          )
+        ).to.be.revertedWith(ERROR_MESSAGES.MISMATCH_TOKEN_ADDRESSES_LENGTH);
       });
     });
 
@@ -337,10 +328,25 @@ describe("GrinderyBatchTransfer", () => {
             [-amount, amount]
           );
         });
+
+        it("Emit Recovered event", async () => {
+          await expect(
+            () => token.transfer(batchTransfer.address, amount)
+          ).to.changeTokenBalances(
+            token,
+            [payer, batchTransfer],
+            [-amount, amount]
+          );
+
+          await expect(
+            batchTransfer.recover(payer.address, token.address)
+          ).to.emit(batchTransfer, EVENTS.RECOVERED)
+            .withArgs(payer.address, token.address, amount);
+        });
       });
 
       describe("Revert", () => {
-        it("Revert recover call if caller is not the owner", async () => {
+        it("Revert recover if caller is not the owner", async () => {
           await expect(
             () => token.transfer(batchTransfer.address, amount)
           ).to.changeTokenBalances(
@@ -351,7 +357,7 @@ describe("GrinderyBatchTransfer", () => {
 
           await expect(
             batchTransfer.connect(recipient).recover(payer.address, token.address)
-          ).to.be.reverted;
+          ).to.be.revertedWith(ERROR_MESSAGES.NOT_OWNER);
         });
       });
     });

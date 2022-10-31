@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.8.0 <0.9.0;
+pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./Recoverable.sol";
@@ -21,7 +21,7 @@ contract OwnerRecoverable is Ownable, Recoverable {
    */
   function recover(address recipient, address token) external onlyOwner {
     (bool success, uint256 balance) = _recover(recipient, token);
-    require(success);
-    emit Recovered(recipient, balance, token);
+    require(success, "Grindery: recovery failed");
+    emit Recovered(recipient, token, balance);
   }
 }

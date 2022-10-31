@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.8.0 <0.9.0;
+pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./Transferable.sol";
@@ -25,13 +25,13 @@ contract BatchTransferable is Transferable {
    * - Any address in `recipients` is equal to the zero address
    */
   modifier isValidBatchTransfer(address[] memory recipients, uint256[] memory amounts, address[] memory tokenAddresses) {
-    require(recipients.length > 0);
-    require(recipients.length == amounts.length);
-    require(recipients.length == tokenAddresses.length || tokenAddresses.length == 0);
+    require(recipients.length > 0, "Grindery: no recipients");
+    require(recipients.length == amounts.length, "Grindery: recipients and amounts arrays are not equal length");
+    require(recipients.length == tokenAddresses.length || tokenAddresses.length == 0, "Grindery: recipients and tokenAddresses arrays are not equal length and tokenAddresses is not empty");
 
     for (uint i; i < recipients.length; i++) {
-      require(amounts[i] > 0);
-      require(recipients[i] != address(0));
+      require(amounts[i] > 0, "Grindery: transfer amount is zero");
+      require(recipients[i] != address(0), "Grindery: recipient is address(0)");
     }
     _;
   }
@@ -57,7 +57,7 @@ contract BatchTransferable is Transferable {
     for (uint i = 0; i < recipients.length; i++) {
       address tokenAddress = (tokenAddresses.length > 0 && tokenAddresses[i] != address(0))?tokenAddresses[i]:address(0);
       bool success = _transfer(recipients[i], amounts[i], tokenAddress, payer);
-      require(success);
+      require(success, "Grindery: transfer failed");
     }
     emit BatchTransfer(payer, recipients, amounts, tokenAddresses);
     return true;
