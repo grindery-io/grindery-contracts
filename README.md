@@ -59,7 +59,7 @@ An initial audit was performed on commit [e4b0f72591b3a961a9017d2ae1726ed7814cc0
 
 The final audit was performed on commit [90522f245ac6fdc8d80dbfa78f462180ebe9f3f8](https://github.com/grindery-io/grindery-contracts/tree/90522f245ac6fdc8d80dbfa78f462180ebe9f3f8) which addressed all the issues raised in the initial audit.
 
-The final audit report is available as a pdf at [/audits/GrinderyPay2021Nov.pdf](./audits/GrinderyPay2021Nov.pdf).
+The final audit report is available as a pdf at [audits/GrinderyPay2022Nov.pdf](./audits/GrinderyPay2022Nov.pdf).
 
 ## Security and Liability
 
